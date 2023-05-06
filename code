@@ -1,0 +1,100 @@
+ import openai
+import time
+import random
+import numpy as np
+import cv2
+import moviepy.editor as mp
+
+# Set OpenAI API key
+openai.api_key = "YOUR_API_KEY"
+
+# Define function to get user input for video resolution
+def get_resolution():
+    # Ask user for resolution
+    resolution = input("Please enter the video resolution (e.g. 1920x1080): ")
+
+    # Parse resolution string into tuple of integers
+    resolution = tuple(map(int, resolution.split("x")))
+
+    return resolution
+
+# Define function to generate movie script
+def generate_script():
+    # Get user input as prompt
+    user_input = input("Please enter the plot for your movie:")
+    prompt = f"User: {user_input}\nAI: "
+
+    # Call OpenAI API to generate script
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        temperature=0.7,
+        max_tokens=1024,
+    )
+
+    # Output generated script
+    script = response.choices[0].text.strip()
+    return script
+
+# Define function to create movie
+def create_movie(script, resolution):
+    # Define movie settings
+    title = "My Awesome Movie"
+    duration = "aslongaspossible" # Set video duration to be as long as possible
+    framerate = 24 # in frames per second
+
+    # Initialize video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(f"{title}.mp4", fourcc, framerate, resolution)
+
+    # Split script into scenes
+    scenes = script.split("\n")
+
+    # Generate frames and clips for each scene
+    for scene in scenes:
+        # Create title for the scene
+        title = f"{title}: {scene.upper()}"
+        print(title)
+
+        # Generate video frame and clip based on scene content
+        if "INT." in scene or "EXT." in scene:
+            # Handle scene description
+            frame = np.zeros((resolution[1], resolution[0], 3), dtype=np.uint8)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            textsize = cv2.getTextSize(scene, font, 1, 2)[0]
+            textX = int((resolution[0] - textsize[0]) / 2)
+            textY = int((resolution[1] - textsize[1]) / 2)
+            cv2.putText(frame, scene, (textX, textY), font, 1, (255, 255, 255), 2)
+            clip = mp.VideoClip(lambda t: frame, duration=5)
+        else:
+            # Use OpenAI API to search for related videos
+            response = openai.Video.create(
+                prompt=scene,
+                n=1,
+                size=f"{resolution[0]}x{resolution[1]}",
+                response_format="url"
+            )
+            video_url = response['data'][0]['url']
+            clip = mp.VideoFileClip(video_url, audio=True)
+
+        # Add clip to video writer
+        for i in range(framerate * clip.duration):
+            t = i / framerate
+            frame = clip.get_frame(t)
+            out.write(frame)
+
+        # Release clip from memory
+        clip.reader.close()
+        clip.audio.reader.close_proc()
+
+    # Release video writer from memory
+    out.release()
+
+# Get user input for video resolution
+resolution = get_resolution()
+
+# Generate movie script
+script = generate_script()
+
+# Call create_movie function to create movie
+create_movie(script, resolution) 
